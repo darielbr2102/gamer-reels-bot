@@ -2,7 +2,7 @@ import fs from 'node:fs';
 
 const {GEMINI_API_KEY} = process.env;
 if (!GEMINI_API_KEY) throw new Error('Falta GEMINI_API_KEY');
-const MODELS = [process.env.GEMINI_MODEL, 'gemini-2.5-flash', 'gemini-3.5-flash', 'gemini-2.5-flash-lite'].filter(Boolean);
+const MODELS = [process.env.GEMINI_MODEL, 'gemini-3.8-flash', 'gemini-3.5-flash', 'gemini-3.5-flash-lite'].filter(Boolean);
 
 const history = JSON.parse(fs.readFileSync('data/history.json', 'utf8'));
 const recent = history.slice(-40).map((h) => h.topic);
@@ -26,25 +26,29 @@ Sin personas ni texto en las imágenes.`;
 
 async function askGemini() {
   let lastError = '';
-  for (const model of MODELS) {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
-      method: 'POST',
-      headers: {'content-type': 'application/json', 'x-goog-api-key': GEMINI_API_KEY},
-      body: JSON.stringify({
-        contents: [{parts: [{text: prompt}]}],
-        generationConfig: {responseMimeType: 'application/json', temperature: 1},
-      }),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      const text = (data.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join('');
-      if (text) {
-        console.log('Modelo usado:', model);
-        return text;
+  for (let round = 1; round <= 3; round++) {
+    for (const model of MODELS) {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+        method: 'POST',
+        headers: {'content-type': 'application/json', 'x-goog-api-key': GEMINI_API_KEY},
+        body: JSON.stringify({
+          contents: [{parts: [{text: prompt}]}],
+          generationConfig: {responseMimeType: 'application/json', temperature: 1},
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const text = (data.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join('');
+        if (text) {
+          console.log('Modelo usado:', model);
+          return text;
+        }
       }
+      lastError = `${model}: HTTP ${res.status} ${await res.text()}`;
+      console.log('Falló', lastError);
     }
-    lastError = `${model}: HTTP ${res.status} ${await res.text()}`;
-    console.log('Falló', lastError);
+    console.log(`Ronda ${round} sin éxito, esperando antes de reintentar...`);
+    await new Promise((r) => setTimeout(r, 20000 * round));
   }
   throw new Error('Gemini no respondió. Último error: ' + lastError);
 }
