@@ -1,0 +1,18 @@
+name: Descomprimir
+on: workflow_dispatch
+permissions:
+  contents: write
+jobs:
+  unzip:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          unzip -o gamer-reels-bot.zip -x "gamer-reels-bot/.github/*"
+          cp -r gamer-reels-bot/. .
+          rm -rf gamer-reels-bot gamer-reels-bot.zip
+          git config user.name bot
+          git config user.email bot@users.noreply.github.com
+          git add -A
+          git commit -m "Archivos del proyecto"
+          git push
