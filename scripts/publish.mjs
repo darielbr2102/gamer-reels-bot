@@ -2,9 +2,15 @@
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 
-const env = process.env;
-const GRAPH = `https://graph.facebook.com/${env.GRAPH_VERSION || 'v21.0'}`;
-const caption = fs.readFileSync('data/caption.txt', 'utf8');
+const env = process.envconst VERSION = env.GRAPH_VERSION || 'v25.0';
+async function pickHost() {
+  for (const host of ['graph.instagram.com', 'graph.facebook.com']) {
+    const r = await fetch(`https://${host}/${VERSION}/${env.IG_USER_ID}?fields=id&access_token=${env.IG_ACCESS_TOKEN}`);
+    if (r.ok) return host;
+  }
+  throw new Error('El token o el IG_USER_ID no funcionan en ninguna de las dos APIs');
+}
+const GRAPH = `https://${await pickHost()}/${VERSION}`;;const caption = fs.readFileSync('data/caption.txt', 'utf8');
 const props = JSON.parse(fs.readFileSync('data/props.json', 'utf8'));
 
 if (env.DRY_RUN === '1') {
