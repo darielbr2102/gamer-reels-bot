@@ -1,9 +1,8 @@
-// 1) Pide a Claude el tema/guion  2) Descarga fotos de Pexels  3) Escribe data/props.json
 import fs from 'node:fs';
 
-const {ANTHROPIC_API_KEY, PEXELS_API_KEY} = process.env;
+const {ANTHROPIC_API_KEY} = process.env;
 const MODEL = process.env.CLAUDE_MODEL || 'claude-sonnet-5-5';
-if (!ANTHROPIC_API_KEY || !PEXELS_API_KEY) throw new Error('Faltan ANTHROPIC_API_KEY o PEXELS_API_KEY');
+if (!ANTHROPIC_API_KEY) throw new Error('Falta ANTHROPIC_API_KEY');
 
 const history = JSON.parse(fs.readFileSync('data/history.json', 'utf8'));
 const recent = history.slice(-40).map((h) => h.topic);
@@ -16,13 +15,14 @@ Responde SOLO con JSON válido, sin texto extra ni markdown:
 {
   "topic": "tema corto",
   "slides": [
-    {"text": "frase corta, máx 8 palabras", "query": "english pexels search query"}
+    {"text": "frase corta, máx 8 palabras", "image_prompt": "english visual description"}
   ],
   "caption": "descripción atractiva de 2-3 líneas con una pregunta al final",
   "hashtags": ["#gamer", "..."]
 }
 Reglas: 6 slides. El primero es un gancho fuerte. El último es un llamado a seguir la cuenta.
-Cada "query" debe ser en inglés y devolver fotos de setups o cuartos gamer (ej: "gaming desk setup rgb", "gaming room led lights").`;
+Cada "image_prompt" debe ser en inglés, describir una escena concreta y relacionada con el texto de ese slide (ej: "modern gaming desk with ultrawide monitor and purple RGB lights, dark room, photorealistic").
+Sin personas ni texto en las imágenes.`;
 
 const res = await fetch('https://api.anthropic.com/v1/messages', {
   method: 'POST',
@@ -37,22 +37,29 @@ const plan = JSON.parse(raw.replace(/```json|```/g, '').trim());
 fs.rmSync('public/img', {recursive: true, force: true});
 fs.mkdirSync('public/img', {recursive: true});
 
-const usedIds = new Set();
+async function makeImage(description, index) {
+  const text = `${description}, vertical composition, cinematic lighting, high quality, no text, no watermark`;
+  for (let attempt = 1; attempt <= 4; attempt++) {
+    try {
+      const seed = Math.floor(Math.random() * 1e6);
+      const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(text)}?width=768&height=1344&model=flux&nologo=true&seed=${seed}`;
+      const r = await fetch(url);
+      const type = r.headers.get('content-type') || '';
+      if (r.ok && type.startsWith('image/')) return Buffer.from(await r.arrayBuffer());
+      console.log(`Slide ${index}: intento ${attempt} falló (HTTP ${r.status})`);
+    } catch (e) {
+      console.log(`Slide ${index}: intento ${attempt} error: ${e.message}`);
+    }
+    await new Promise((r) => setTimeout(r, 8000 * attempt));
+  }
+  throw new Error(`No se pudo generar la imagen del slide ${index}`);
+}
+
 const slides = [];
 for (const [i, s] of plan.slides.entries()) {
-  const r = await fetch(
-    `https://api.pexels.com/v1/search?query=${encodeURIComponent(s.query)}&orientation=portrait&per_page=15`,
-    {headers: {Authorization: PEXELS_API_KEY}},
-  );
-  if (!r.ok) throw new Error(`Pexels ${r.status}: ${await r.text()}`);
-  const {photos} = await r.json();
-  const options = photos.filter((p) => !usedIds.has(p.id));
-  if (!options.length) throw new Error(`Sin fotos para "${s.query}"`);
-  const photo = options[Math.floor(Math.random() * options.length)];
-  usedIds.add(photo.id);
-  const img = await fetch(photo.src.large2x);
+  const buf = await makeImage(s.image_prompt, i);
   const file = `img/slide${i}.jpg`;
-  fs.writeFileSync(`public/${file}`, Buffer.from(await img.arrayBuffer()));
+  fs.writeFileSync(`public/${file}`, buf);
   slides.push({text: s.text, image: file});
 }
 
