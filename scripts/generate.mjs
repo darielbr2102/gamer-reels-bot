@@ -1,8 +1,8 @@
 import fs from 'node:fs';
 
-const {ANTHROPIC_API_KEY} = process.env;
-const MODEL = process.env.CLAUDE_MODEL || 'claude-sonnet-5-5';
-if (!ANTHROPIC_API_KEY) throw new Error('Falta ANTHROPIC_API_KEY');
+const {GEMINI_API_KEY} = process.env;
+if (!GEMINI_API_KEY) throw new Error('Falta GEMINI_API_KEY');
+const MODELS = [process.env.GEMINI_MODEL, 'gemini-2.5-flash', 'gemini-3.5-flash', 'gemini-2.5-flash-lite'].filter(Boolean);
 
 const history = JSON.parse(fs.readFileSync('data/history.json', 'utf8'));
 const recent = history.slice(-40).map((h) => h.topic);
@@ -24,14 +24,32 @@ Reglas: 6 slides. El primero es un gancho fuerte. El último es un llamado a seg
 Cada "image_prompt" debe ser en inglés, describir una escena concreta y relacionada con el texto de ese slide (ej: "modern gaming desk with ultrawide monitor and purple RGB lights, dark room, photorealistic").
 Sin personas ni texto en las imágenes.`;
 
-const res = await fetch('https://api.anthropic.com/v1/messages', {
-  method: 'POST',
-  headers: {'content-type': 'application/json', 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01'},
-  body: JSON.stringify({model: MODEL, max_tokens: 1500, messages: [{role: 'user', content: prompt}]}),
-});
-if (!res.ok) throw new Error(`Claude API ${res.status}: ${await res.text()}`);
-const data = await res.json();
-const raw = data.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
+async function askGemini() {
+  let lastError = '';
+  for (const model of MODELS) {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+      method: 'POST',
+      headers: {'content-type': 'application/json', 'x-goog-api-key': GEMINI_API_KEY},
+      body: JSON.stringify({
+        contents: [{parts: [{text: prompt}]}],
+        generationConfig: {responseMimeType: 'application/json', temperature: 1},
+      }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const text = (data.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join('');
+      if (text) {
+        console.log('Modelo usado:', model);
+        return text;
+      }
+    }
+    lastError = `${model}: HTTP ${res.status} ${await res.text()}`;
+    console.log('Falló', lastError);
+  }
+  throw new Error('Gemini no respondió. Último error: ' + lastError);
+}
+
+const raw = await askGemini();
 const plan = JSON.parse(raw.replace(/```json|```/g, '').trim());
 
 fs.rmSync('public/img', {recursive: true, force: true});
