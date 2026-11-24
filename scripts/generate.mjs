@@ -27,7 +27,7 @@ Sin personas ni texto en las imágenes.`;
 
 async function askGemini() {
   let lastError = '';
-  for (let round = 1; round <= 3; round++) {
+  for (let round = 1; round <= 6; round++) {
     for (const model of MODELS) {
       const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
         method: 'POST',
@@ -48,8 +48,9 @@ async function askGemini() {
       lastError = `${model}: HTTP ${res.status} ${await res.text()}`;
       console.log('Falló', lastError.slice(0, 300));
     }
-    console.log(`Ronda ${round} sin éxito, esperando antes de reintentar...`);
-    await new Promise((r) => setTimeout(r, 20000 * round));
+    const wait = 30 * Math.min(round, 4);
+    console.log(`Ronda ${round} sin éxito, esperando ${wait} s antes de reintentar...`);
+    await new Promise((r) => setTimeout(r, wait * 1000));
   }
   throw new Error('Gemini no respondió. Último error: ' + lastError);
 }
