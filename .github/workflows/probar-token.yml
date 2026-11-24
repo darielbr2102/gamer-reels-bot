@@ -11,10 +11,10 @@ jobs:
         run: |
           T=$(printf '%s' "$IG_ACCESS_TOKEN" | tr -d " \r\n\"'")
           I=$(printf '%s' "$IG_USER_ID" | tr -d " \r\n\"'")
-          echo "Largo del token: ${#T}"
-          echo "Largo del ID: ${#I}"
-          echo "El token empieza por: ${T:0:3}"
-          echo "--- graph.instagram.com"
-          curl -s "https://graph.instagram.com/v25.0/me?fields=id,username&access_token=$T"; echo
-          echo "--- graph.facebook.com"
-          curl -s "https://graph.facebook.com/v25.0/$I?fields=id,username&access_token=$T"; echo
+          echo "Largo token: ${#T} | Largo ID: ${#I} | Empieza: ${T:0:3}"
+          G=https://graph.facebook.com/v25.0
+          echo "--- 1. quien es el token"; curl -s "$G/me?fields=id,name&access_token=$T"; echo
+          echo "--- 2. permisos"; curl -s "$G/me/permissions?access_token=$T"; echo
+          echo "--- 3. paginas"; curl -s "$G/me/accounts?access_token=$T"; echo
+          echo "--- 4. negocios"; curl -s "$G/me/businesses?access_token=$T"; echo
+          echo "--- 5. cuenta de IG por ID"; curl -s "$G/$I?fields=id,username&access_token=$T"; echo
