@@ -1,0 +1,20 @@
+name: Probar token
+on: workflow_dispatch
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probar
+        env:
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+        run: |
+          T=$(printf '%s' "$IG_ACCESS_TOKEN" | tr -d " \r\n\"'")
+          I=$(printf '%s' "$IG_USER_ID" | tr -d " \r\n\"'")
+          echo "Largo del token: ${#T}"
+          echo "Largo del ID: ${#I}"
+          echo "El token empieza por: ${T:0:3}"
+          echo "--- graph.instagram.com"
+          curl -s "https://graph.instagram.com/v25.0/me?fields=id,username&access_token=$T"; echo
+          echo "--- graph.facebook.com"
+          curl -s "https://graph.facebook.com/v25.0/$I?fields=id,username&access_token=$T"; echo
