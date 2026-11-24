@@ -3,6 +3,9 @@ import fs from 'node:fs';
 import crypto from 'node:crypto';
 
 const env = process.env;
+const clean = (v) => (v || '').replace(/^Bearer\s+/i, '').replace(/["'\s]/g, '');
+const TOKEN = clean(env.IG_ACCESS_TOKEN);
+const IG_ID = clean(env.IG_USER_ID);
 const VERSION = env.GRAPH_VERSION || 'v25.0';
 const caption = fs.readFileSync('data/caption.txt', 'utf8');
 const props = JSON.parse(fs.readFileSync('data/props.json', 'utf8'));
@@ -12,11 +15,15 @@ if (env.DRY_RUN === '1') {
   process.exit(0);
 }
 
+console.log('Largo del token:', TOKEN.length, '| Largo del ID:', IG_ID.length, '| ID solo números:', /^\d+$/.test(IG_ID));
+if (TOKEN.length < 60) console.log('AVISO: el token es muy corto, parece mal copiado o es otro dato.');
+if (!/^\d+$/.test(IG_ID)) console.log('AVISO: IG_USER_ID debe ser solo un número.');
+
 // Detecta con qué API funciona tu token
 async function pickHost() {
   const errors = [];
   for (const host of ['graph.instagram.com', 'graph.facebook.com']) {
-    const r = await fetch(`https://${host}/${VERSION}/${env.IG_USER_ID}?fields=id&access_token=${env.IG_ACCESS_TOKEN}`);
+    const r = await fetch(`https://${host}/${VERSION}/${IG_ID}?fields=id&access_token=${TOKEN}`);
     if (r.ok) {
       console.log('Usando', host);
       return host;
@@ -45,16 +52,16 @@ if (!up.ok) throw new Error(`Cloudinary ${up.status}: ${await up.text()}`);
 const videoUrl = (await up.json()).secure_url;
 
 // 2) Contenedor de Reel
-const create = await fetch(`${GRAPH}/${env.IG_USER_ID}/media`, {
+const create = await fetch(`${GRAPH}/${IG_ID}/media`, {
   method: 'POST',
-  body: new URLSearchParams({media_type: 'REELS', video_url: videoUrl, caption, share_to_feed: 'true', access_token: env.IG_ACCESS_TOKEN}),
+  body: new URLSearchParams({media_type: 'REELS', video_url: videoUrl, caption, share_to_feed: 'true', access_token: TOKEN}),
 });
 const created = await create.json();
 if (!created.id) throw new Error('Error creando contenedor: ' + JSON.stringify(created));
 
 // 3) Esperar a que Instagram procese el video
 for (let i = 0; i < 30; i++) {
-  const st = await (await fetch(`${GRAPH}/${created.id}?fields=status_code&access_token=${env.IG_ACCESS_TOKEN}`)).json();
+  const st = await (await fetch(`${GRAPH}/${created.id}?fields=status_code&access_token=${TOKEN}`)).json();
   if (st.status_code === 'FINISHED') break;
   if (st.status_code === 'ERROR' || st.status_code === 'EXPIRED') throw new Error('Instagram falló: ' + JSON.stringify(st));
   if (i === 29) throw new Error('Timeout esperando a Instagram');
@@ -62,9 +69,9 @@ for (let i = 0; i < 30; i++) {
 }
 
 // 4) Publicar
-const pub = await (await fetch(`${GRAPH}/${env.IG_USER_ID}/media_publish`, {
+const pub = await (await fetch(`${GRAPH}/${IG_ID}/media_publish`, {
   method: 'POST',
-  body: new URLSearchParams({creation_id: created.id, access_token: env.IG_ACCESS_TOKEN}),
+  body: new URLSearchParams({creation_id: created.id, access_token: TOKEN}),
 })).json();
 if (!pub.id) throw new Error('Error publicando: ' + JSON.stringify(pub));
 console.log('Publicado, media id:', pub.id);
